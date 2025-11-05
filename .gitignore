@@ -1,0 +1,123 @@
+# ============================================
+# StickyBoard iOS – Complete Project .gitignore
+# Includes:
+#   - SwiftUI app sources
+#   - StickyBoardKit data layer
+#   - Xcode build artifacts
+#   - Swift Package Manager & CocoaPods
+#   - Secrets, local configs, and caches
+# ============================================
+
+# --- Xcode ---
+DerivedData/
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+*.xcuserstate
+*.xcworkspace/xcuserdata
+*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+
+# --- Swift Package Manager ---
+.swiftpm/
+.build/
+Package.resolved
+Sources/**/.build/
+Sources/**/.swiftpm/
+
+# --- CocoaPods (if used later) ---
+Pods/
+Podfile.lock
+
+# --- Carthage (optional) ---
+Carthage/
+Carthage/Build/
+
+# --- Generated files ---
+*.dSYM
+*.ipa
+*.xcarchive
+*.xcresult
+*.hmap
+*.index
+*.profdata
+*.gcno
+*.gcda
+
+# --- User data & temporary ---
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*.tmp
+*.bak
+
+# --- Environment / Secrets ---
+.env
+.env.*
+Secrets/
+Config/
+PrivateKeys/
+*.pem
+*.key
+*.crt
+*.mobileprovision
+*.p12
+
+# --- StickyBoardKit ---
+# Keep the data layer source code but exclude any cache, test build, or temp data
+Sources/StickyBoardKit/.DS_Store
+Sources/StickyBoardKit/.build/
+Sources/StickyBoardKit/.swiftpm/
+Sources/StickyBoardKit/Tests/
+Sources/StickyBoardKit/DerivedData/
+
+# --- App cache / Simulator / Debug ---
+*.simruntime
+*.xcdevice
+*.lock
+*.xcdebugger
+*.lldb
+*.crash
+*.trace
+
+# --- Xcode Cloud / CI artifacts ---
+.xccoverage/
+.xcresultbundle/
+fastlane/report.xml
+fastlane/test_output/
+
+# --- SwiftLint / SwiftFormat ---
+.swiftlint.yml
+.swiftformat
+
+# --- Preview / UI Design ---
+*.preview-thumbnails
+*.preview-thumbnails/
+*.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+
+# --- Misc ---
+*.orig
+*.rej
+*.patch
+*.diff
+*.zip
+*.tar
+*.tgz
+
+# ============================================
+# End of StickyBoard iOS .gitignore
+# ============================================
