@@ -7,7 +7,10 @@ struct BoardsTabView: View {
     @State private var showTabEditor = false
     @State private var editingTab: LocalTab?
 
-    // MARK: - Init
+    // accordion state
+    @State private var expandedSectionId: UUID? = nil
+
+    // Init
     init(app: AppState = .shared) {
         _vm = StateObject(wrappedValue: BoardsViewModel(app: app))
     }
@@ -15,17 +18,20 @@ struct BoardsTabView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+
+                // Loading state
                 if vm.isLoading {
                     ProgressView("Loading...")
                         .padding(.top, 40)
 
+                // Error
                 } else if let err = vm.errorMessage {
                     Text(err)
                         .foregroundColor(.red)
                         .padding()
 
+                // Board list (no board selected yet)
                 } else if vm.selectedBoard == nil {
-                    // MARK: Board List
                     List(vm.boards, id: \.id) { board in
                         Button {
                             Task { await vm.selectBoard(board) }
@@ -40,8 +46,10 @@ struct BoardsTabView: View {
                         }
                     }
 
+                // Board view
                 } else {
-                    // MARK: Tabs Bar
+
+                    // Tabs
                     TopTabsDock(
                         boardTitle: vm.selectedBoard?.title ?? "Untitled Board",
                         tabs: $vm.tabs,
@@ -53,19 +61,21 @@ struct BoardsTabView: View {
 
                     Divider().padding(.bottom, 4)
 
-                    // MARK: Section Scroll
+                    // Sections
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 24) {
+
                             ForEach($vm.sections) { $section in
                                 CollapsibleSectionView(
                                     section: $section,
                                     boardId: vm.selectedBoard?.id,
-                                    tabId: app.selectedTabId
+                                    tabId: app.selectedTabId,
+                                    expandedSectionId: $expandedSectionId
                                 )
                                 .environmentObject(app)
                             }
 
-                            // MARK: Add Section Button
+                            // Add Section Button
                             Button {
                                 Task { await vm.addNewSection() }
                             } label: {
@@ -89,7 +99,7 @@ struct BoardsTabView: View {
             }
             .navigationTitle("Boards")
 
-            // MARK: - Create Tab Sheet
+            // Create tab sheet
             .sheet(isPresented: $showTabEditor) {
                 if let board = vm.selectedBoard {
                     TabEditorSheet(onSave: { dto in
@@ -112,7 +122,7 @@ struct BoardsTabView: View {
                 }
             }
 
-            // MARK: - Edit Tab Sheet
+            // Edit tab sheet
             .sheet(item: $editingTab) { tab in
                 if let board = vm.selectedBoard {
                     TabEditorSheet(
@@ -139,12 +149,14 @@ struct BoardsTabView: View {
                 }
             }
 
-            // MARK: - Initial Load + Reactivity
+            // Initial load
             .task {
                 if vm.boards.isEmpty {
                     await vm.loadMyBoards()
                 }
             }
+
+            // Auto select a board if changed
             .onReceive(app.$selectedBoardId.dropFirst()) { boardId in
                 Task {
                     if let id = boardId {
@@ -154,6 +166,14 @@ struct BoardsTabView: View {
                         vm.tabs = []
                         vm.sections = []
                     }
+                }
+            }
+
+            // Auto-expand first section when sections load
+            .onChange(of: vm.sections) { newSections in
+                if expandedSectionId == nil, let first = newSections.first {
+                    expandedSectionId = first.id
+                    vm.sections[0].isExpanded = true   //expand first
                 }
             }
         }

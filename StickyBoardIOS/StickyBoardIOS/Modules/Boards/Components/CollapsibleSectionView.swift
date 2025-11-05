@@ -3,18 +3,19 @@ import StickyBoardKit
 
 struct CollapsibleSectionView: View {
     @Binding var section: LocalSection
+    @Binding var expandedSectionId: UUID?
     @StateObject private var vm: CardsViewModel
     @State private var selectedCard: LocalCard?
 
-    // MARK: - Context menu states
-    @State private var showOptions = false
+    // Rename/Delete
     @State private var showRenameSheet = false
     @State private var newTitle = ""
     @State private var isProcessing = false
 
     // MARK: - Init
-    init(section: Binding<LocalSection>, boardId: UUID?, tabId: UUID?) {
+    init(section: Binding<LocalSection>, boardId: UUID?, tabId: UUID?, expandedSectionId: Binding<UUID?>) {
         _section = section
+        _expandedSectionId = expandedSectionId
         _vm = StateObject(
             wrappedValue: CardsViewModel(
                 boardId: boardId ?? UUID(),
@@ -26,100 +27,88 @@ struct CollapsibleSectionView: View {
 
     // MARK: - Body
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // MARK: Section Header
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                    section.isExpanded.toggle()
+        VStack(alignment: .leading, spacing: 8) {
+            // MARK: Section Header (tap to expand, long-press menu via contextMenu)
+            HStack {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        if expandedSectionId == section.id {
+                            // collapse if already open
+                            expandedSectionId = nil
+                            section.isExpanded = false
+                        } else {
+                            // open this + collapse others
+                            expandedSectionId = section.id
+                            section.isExpanded = true
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(section.title)
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                    .padding(.horizontal)
+                    .padding(.top, 4)
                 }
-            } label: {
-                HStack {
-                    Text(section.title)
-                        .font(.headline)
-                    Spacer()
-                    Image(systemName: section.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .onLongPressGesture {
-                showOptions = true
+            
+            .contextMenu {
+                Button("Rename Section") {
+                    newTitle = section.title
+                    showRenameSheet = true
+                }
+                Button("Delete Section", role: .destructive) {
+                    Task { await deleteSection() }
+                }
+            }
+            .onChange(of: expandedSectionId) { newId in
+                section.isExpanded = (newId == section.id)
             }
 
             // MARK: Cards
             if section.isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    if vm.isLoading {
-                        ProgressView().padding()
-                    } else if vm.cards.isEmpty {
-                        Text("No cards")
+                if vm.isLoading {
+                    ProgressView().padding()
+                } else if vm.cards.isEmpty {
+                    // Empty state + compact add button
+                    VStack(spacing: 10) {
+                        Text("No cards yet")
                             .font(.footnote)
                             .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                    } else {
+                        addCardButton
+                    }
+                    .padding(.vertical, 8)
+                } else {
+                    // Sticky grid
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 140), spacing: 12)],
+                        spacing: 12
+                    ) {
                         ForEach($vm.cards) { $card in
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(.systemGray6))
-                                .overlay(
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(card.title ?? "Untitled")
-                                            .font(.subheadline.bold())
-
-                                        HStack {
-                                            Text(describeCardType(card.type))
-                                                .font(.caption2)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 2)
-                                                .background(Color.blue.opacity(0.1))
-                                                .cornerRadius(5)
-
-                                            Text(describeCardStatus(card.status))
-                                                .font(.caption2)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 2)
-                                                .background(Color.green.opacity(0.1))
-                                                .cornerRadius(5)
-                                        }
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                )
-                                .frame(height: 70)
-                                .padding(.horizontal)
-                                .onTapGesture {
-                                    selectedCard = card
-                                }
+                            CardCompactView(card: $card) {
+                                selectedCard = card
+                            }
                         }
+                        addCardTile
                     }
-
-                    // MARK: Add Card Button
-                    Button {
-                        Task { await vm.addCard() }
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add Card")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .foregroundColor(.accentColor)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                        .padding(.horizontal)
-                    }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal)
+                    .padding(.top, 4)
                 }
-                .padding(.bottom, 6)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .task { await vm.loadCards() }
 
         // MARK: - Card detail sheet
-        .sheet(item: $selectedCard) { card in
+        .sheet(item: $selectedCard, onDismiss: {
+            Task { await vm.loadCards() } // <- force refresh from server after close
+        }) { card in
             if let binding = vm.binding(for: card) {
                 CardDetailView(
                     card: binding,
@@ -134,73 +123,102 @@ struct CollapsibleSectionView: View {
                     .foregroundColor(.secondary)
             }
         }
-
-        // MARK: - Context Menu
-        .confirmationDialog("Section Options", isPresented: $showOptions, titleVisibility: .visible) {
-            Button("Rename Section") {
-                newTitle = section.title
-                showRenameSheet = true
-            }
-
-            Button("Delete Section", role: .destructive) {
-                Task { await deleteSection() }
-            }
-
-            Button("Cancel", role: .cancel) {}
-        }
-
         // MARK: - Rename Sheet
         .sheet(isPresented: $showRenameSheet) {
-            VStack(spacing: 20) {
-                Text("Rename Section")
-                    .font(.title3.bold())
-                    .padding(.top)
-
-                TextField("New title", text: $newTitle)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal)
-
-                if isProcessing {
-                    ProgressView().padding(.vertical)
-                }
-
-                Button("Save") {
-                    Task { await renameSection() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isProcessing || newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
-                .padding(.bottom, 12)
-
-                Button("Cancel", role: .cancel) {
-                    showRenameSheet = false
-                }
-                .tint(.secondary)
-
-                Spacer()
-            }
-            .presentationDetents([.medium])
-            .padding()
+            renameSheet
         }
     }
 
-    // MARK: - Actions
+    // MARK: - Add Card UI
+
+    private var addCardButton: some View {
+        Button {
+            Task { await vm.addCard() }
+        } label: {
+            Label("Add Card", systemImage: "plus.square.fill.on.square.fill")
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var addCardTile: some View {
+        Button {
+            Task { await vm.addCard() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.yellow.opacity(0.25))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.yellow.opacity(0.5), lineWidth: 1.2)
+                    )
+
+                VStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.title2.weight(.bold))
+                    Text("New")
+                        .font(.caption.weight(.medium))
+                }
+                .foregroundColor(.gray)
+            }
+            .frame(height: 120)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add card")
+    }
+
+    // MARK: - Rename Sheet UI
+
+    private var renameSheet: some View {
+        VStack(spacing: 20) {
+            Text("Rename Section")
+                .font(.title3.bold())
+                .padding(.top)
+
+            TextField("New title", text: $newTitle)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal)
+
+            if isProcessing {
+                ProgressView().padding(.vertical)
+            }
+
+            Button("Save") {
+                Task { await renameSection() }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isProcessing || newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            .padding(.bottom, 12)
+
+            Button("Cancel", role: .cancel) {
+                showRenameSheet = false
+            }
+            .tint(.secondary)
+
+            Spacer()
+        }
+        .presentationDetents([.medium])
+        .padding()
+    }
+
+    // MARK: - Backend Actions
+
     private func renameSection() async {
         guard !newTitle.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         isProcessing = true
         do {
-            // Update locally
+            // Update locally for instant UI feedback
             section.title = newTitle
 
-            // Build DTO with current position
             let dto = SectionUpdateDto(
                 title: newTitle,
                 position: section.position
             )
-
-            // Send to backend
             try await AppState.shared.sectionService.update(id: section.id, dto: dto)
-
-            // Close sheet
             showRenameSheet = false
         } catch {
             print("Rename error:", error.localizedDescription)
@@ -212,7 +230,7 @@ struct CollapsibleSectionView: View {
         isProcessing = true
         do {
             try await AppState.shared.sectionService.delete(id: section.id)
-            // Parent refresh will handle actual removal
+            // parent container handles actual removal from the list
         } catch {
             print("Delete error:", error.localizedDescription)
         }
@@ -220,7 +238,7 @@ struct CollapsibleSectionView: View {
     }
 }
 
-// MARK: - Helpers
+// MARK: - (Kept) Helpers – if still used elsewhere
 private func describeCardType(_ type: CardType) -> String {
     switch type {
     case .note: return "Note"

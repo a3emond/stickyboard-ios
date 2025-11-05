@@ -20,16 +20,30 @@ public final class APIClient: @unchecked Sendable {
         let d = JSONDecoder()
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let isoNoFrac = ISO8601DateFormatter()
+        isoNoFrac.formatOptions = [.withInternetDateTime]
+
         d.dateDecodingStrategy = .custom { decoder in
             let c = try decoder.singleValueContainer()
             let s = try c.decode(String.self)
+
+            // Try fractional seconds first
             if let date = iso.date(from: s) { return date }
+            // Try without fractional seconds
+            if let date = isoNoFrac.date(from: s) { return date }
+
+            // Legacy (DB rows created before feature)
             let legacy = DateFormatter()
             legacy.dateFormat = "yyyy-MM-dd HH:mm:ss"
             legacy.locale = Locale(identifier: "en_US_POSIX")
             legacy.timeZone = TimeZone(secondsFromGMT: 0)
             if let date = legacy.date(from: s) { return date }
-            throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unrecognized date: \(s)")
+
+            throw DecodingError.dataCorruptedError(
+                in: c,
+                debugDescription: "Unrecognized date: \(s)"
+            )
         }
         dec = d
 

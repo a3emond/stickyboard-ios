@@ -14,6 +14,11 @@ struct LocalCard: Identifiable, Equatable {
     var dueDate: Date?
     var startTime: Date?
     var endTime: Date?
+
+    // we add these ⬇️ (needed for updates)
+    var sectionId: UUID?
+    var tabId: UUID?
+
     var isExpanded: Bool = false
     
     init(from dto: CardDto) {
@@ -29,6 +34,10 @@ struct LocalCard: Identifiable, Equatable {
         dueDate = dto.dueDate
         startTime = dto.startTime
         endTime = dto.endTime
+        
+        // new fields populated
+        sectionId = dto.sectionId
+        tabId = dto.tabId
     }
     
     static func == (lhs: LocalCard, rhs: LocalCard) -> Bool {
@@ -37,7 +46,8 @@ struct LocalCard: Identifiable, Equatable {
         lhs.status == rhs.status &&
         lhs.priority == rhs.priority &&
         lhs.dueDate == rhs.dueDate &&
-        lhs.inkData == rhs.inkData
+        lhs.inkData == rhs.inkData &&
+        lhs.content == rhs.content &&
+        lhs.assigneeId == rhs.assigneeId
     }
-    
 }

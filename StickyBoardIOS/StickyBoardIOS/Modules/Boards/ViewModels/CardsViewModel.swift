@@ -19,26 +19,48 @@ final class CardsViewModel: ObservableObject {
     }
 
     // ============================================================
-    // MARK: - Load
+    // MARK: - Load (robust with fallback)
     // ============================================================
     func loadCards() async {
         isLoading = true
         defer { isLoading = false }
 
         do {
+            print("LOADcards → board=\(boardId)")
+            print("  tab=\(tabId)")
+            print("  section=\(String(describing: sectionId))")
+
             let dtos: [CardDto]
+
             if let sectionId {
-                dtos = try await app.cardService.getBySection(sectionId: sectionId)
+                // Primary path: by section
+                let bySection = try await app.cardService.getBySection(sectionId: sectionId)
+                print("RESULT bySection count: \(bySection.count)")
+
+                if bySection.isEmpty {
+                    // Fallback: fetch by tab and filter in app
+                    let byTab = try await app.cardService.getByTab(tabId: tabId)
+                    print("RESULT byTab (for fallback) count: \(byTab.count)")
+                    dtos = byTab.filter { $0.sectionId == sectionId }
+                    print("RESULT after client filter for section: \(dtos.count)")
+                } else {
+                    dtos = bySection
+                }
             } else {
-                dtos = try await app.cardService.getByTab(tabId: tabId)
+                // No section context: standard tab fetch
+                let byTab = try await app.cardService.getByTab(tabId: tabId)
+                print("RESULT byTab count: \(byTab.count)")
+                dtos = byTab
             }
 
             cards = dtos.map { LocalCard(from: $0) }
         } catch {
             errorMessage = (error as? APIError)?.description ?? error.localizedDescription
+            print("LOAD error:", errorMessage ?? error.localizedDescription)
+            // Ultra-safe fallback: keep UI populated if possible
+            // (no change to 'cards' on failure)
         }
     }
-
     // ============================================================
     // MARK: - Create
     // ============================================================
@@ -69,19 +91,21 @@ final class CardsViewModel: ObservableObject {
     // MARK: - Update
     // ============================================================
     func updateCard(_ card: LocalCard, dto: CardUpdateDto) async {
+        print("Updating card \(card.id)")
         do {
             try await app.cardService.update(id: card.id, dto: dto)
 
+            // Pull fresh version from backend so ink + content sync
+            let fresh = try await app.cardService.get(id: card.id)
+
             if let i = cards.firstIndex(where: { $0.id == card.id }) {
-                var updated = card
-                updated.title = dto.title ?? card.title
-                updated.content = dto.content ?? card.content
-                updated.priority = dto.priority
-                updated.dueDate = dto.dueDate
-                cards[i] = updated
+                cards[i] = LocalCard(from: fresh)
+                // Force refresh to notify SwiftUI
+                            objectWillChange.send()
             }
         } catch {
             errorMessage = (error as? APIError)?.description ?? error.localizedDescription
+            print("Update error:", error)
         }
     }
 
